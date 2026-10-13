@@ -187,6 +187,9 @@ class GridWindow(QMainWindow):
     def dragEnterEvent(self, event):
         self.controller.dragEnterEvent(event)
 
+    def dragMoveEvent(self, event):
+        self.controller.dragMoveEvent(event)
+
     def dropEvent(self, event):
         self.controller.dropEvent(event)
 
@@ -982,6 +985,15 @@ class SceneGridWindow(QMainWindow):
             self.show_result(f"フォルダを表示: {folder}")
 
     def eventFilter(self, target, event):
+        if event.type() in (QEvent.DragEnter, QEvent.DragMove, QEvent.Drop) and isinstance(target, QWidget):
+            if target.window() in (self, self.grid_window):
+                if event.type() == QEvent.Drop:
+                    self.dropEvent(event)
+                elif event.type() == QEvent.DragMove:
+                    self.dragMoveEvent(event)
+                else:
+                    self.dragEnterEvent(event)
+                return True
         if event.type() != QEvent.KeyPress or not isinstance(target, QWidget):
             return super().eventFilter(target, event)
         window = target.window()
@@ -1226,20 +1238,29 @@ class SceneGridWindow(QMainWindow):
                 message.exec()
         self.operation_task(lambda progress, cancelled: transfer_files(paths, destination, move, identical_overwrite, conflict, progress), done, snapshot)
 
+    def drop_target(self, mime):
+        if self.busy or bytes(mime.data("application/x-scenegrid-source")).decode(errors="ignore") == self.drag_token:
+            return None
+        return next((Path(url.toLocalFile()) for url in mime.urls() if url.isLocalFile()), None)
+
     def dragEnterEvent(self, event):
-        if self.busy or bytes(event.mimeData().data("application/x-scenegrid-source")).decode(errors="ignore") == self.drag_token:
+        if self.drop_target(event.mimeData()) is None or not event.possibleActions() & Qt.CopyAction:
             event.ignore()
-        elif event.mimeData().hasUrls() and event.mimeData().urls()[0].isLocalFile():
-            event.acceptProposedAction()
+        else:
+            event.setDropAction(Qt.CopyAction)
+            event.accept()
+
+    def dragMoveEvent(self, event):
+        self.dragEnterEvent(event)
 
     def dropEvent(self, event):
-        if self.busy or bytes(event.mimeData().data("application/x-scenegrid-source")).decode(errors="ignore") == self.drag_token:
+        target = self.drop_target(event.mimeData())
+        if target is None or not event.possibleActions() & Qt.CopyAction:
             event.ignore()
             return
-        urls = event.mimeData().urls()
-        if urls and urls[0].isLocalFile():
-            self.open_target(Path(urls[0].toLocalFile()))
-            event.acceptProposedAction()
+        event.setDropAction(Qt.CopyAction)
+        event.accept()
+        self.open_target(target)
 
     def closeEvent(self, event):
         if self.busy:

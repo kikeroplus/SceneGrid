@@ -9,8 +9,8 @@ from unittest.mock import patch
 import cv2
 import numpy as np
 import win32api
-from PySide6.QtCore import QPoint, QPointF, Qt, QTimer
-from PySide6.QtGui import QImage, QWheelEvent
+from PySide6.QtCore import QMimeData, QPoint, QPointF, Qt, QTimer, QUrl
+from PySide6.QtGui import QDragEnterEvent, QDragMoveEvent, QDropEvent, QImage, QWheelEvent
 from PySide6.QtMultimedia import QMediaPlayer
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QDialog, QMenu, QMessageBox
@@ -552,6 +552,58 @@ class SceneGridStandardTest(unittest.TestCase):
             images = core.extract_contact_sheet(self.root / "native.mp4", None, count=1)
         self.assertEqual(images[0].width(), 9000)
         self.assertEqual(images[0].height(), 2)
+
+    def drop_events(self, target, mime, actions=Qt.CopyAction | Qt.MoveAction):
+        events = [
+            QDragEnterEvent(QPoint(20, 20), actions, mime, Qt.LeftButton, Qt.NoModifier),
+            QDragMoveEvent(QPoint(20, 20), actions, mime, Qt.LeftButton, Qt.NoModifier),
+            QDropEvent(QPointF(20, 20), actions, mime, Qt.LeftButton, Qt.NoModifier),
+        ]
+        for event in events:
+            QApplication.sendEvent(target, event)
+        return events
+
+    def test_video_drop_opens_and_selects_file_from_all_main_surfaces(self):
+        p2 = self.video("video2.mp4")
+        target_path = self.video("video10 sample.mp4")
+        mime = QMimeData()
+        mime.setUrls([QUrl.fromLocalFile(str(target_path))])
+        targets = [self.window, self.window.sheet.viewport(), self.window.list_widget.viewport(), self.window.tree.viewport()]
+        for target in targets:
+            with self.subTest(target=type(target).__name__):
+                events = self.drop_events(target, mime)
+                self.assertTrue(all(event.isAccepted() for event in events))
+                self.assertTrue(all(event.dropAction() == Qt.CopyAction for event in events))
+                self.wait(lambda: len(self.window.ratings_known) == 2 and self.window.current_item() and self.window.current_item().path == target_path)
+                self.assertEqual(self.window.folder, self.root)
+                self.assertTrue(p2.exists())
+                self.assertTrue(target_path.exists())
+        self.window.open_grid()
+        events = self.drop_events(self.window.grid_window.list_widget.viewport(), mime)
+        self.assertTrue(all(event.isAccepted() for event in events))
+        self.wait(lambda: len(self.window.ratings_known) == 2 and self.window.current_item() and self.window.current_item().path == target_path)
+        mime.setUrls([QUrl.fromLocalFile(str(self.root))])
+        events = self.drop_events(self.window.sheet.viewport(), mime)
+        self.assertTrue(all(event.isAccepted() for event in events))
+        self.wait(lambda: len(self.window.ratings_known) == 2 and self.window.current_item() and self.window.current_item().path == p2)
+
+    def test_drop_rejects_internal_busy_remote_and_move_only_drags(self):
+        path = self.video()
+        mime = QMimeData()
+        mime.setUrls([QUrl.fromLocalFile(str(path))])
+        mime.setData("application/x-scenegrid-source", self.window.drag_token.encode())
+        generation = self.window.generation
+        self.assertFalse(any(event.isAccepted() for event in self.drop_events(self.window.sheet.viewport(), mime)))
+        mime.removeFormat("application/x-scenegrid-source")
+        self.window.busy = True
+        try:
+            self.assertFalse(any(event.isAccepted() for event in self.drop_events(self.window.list_widget.viewport(), mime)))
+        finally:
+            self.window.busy = False
+        self.assertFalse(any(event.isAccepted() for event in self.drop_events(self.window, mime, Qt.MoveAction)))
+        mime.setUrls([QUrl("https://example.com/video.mp4")])
+        self.assertFalse(any(event.isAccepted() for event in self.drop_events(self.window, mime)))
+        self.assertEqual(self.window.generation, generation)
 
 
 if __name__ == "__main__":

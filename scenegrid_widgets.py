@@ -124,6 +124,8 @@ class ContactSheetView(QGraphicsView):
         self.setRenderHint(QPainter.SmoothPixmapTransform)
         self.setTransformationAnchor(QGraphicsView.AnchorUnderMouse)
         self.setDragMode(QGraphicsView.ScrollHandDrag)
+        self.setAcceptDrops(True)
+        self.viewport().setAcceptDrops(True)
         self.images = []
         self.zoom = 1.0
         self.press_position = QPoint()
@@ -315,7 +317,8 @@ class VideoList(QListWidget):
         self.setWordWrap(False)
         self.setTextElideMode(Qt.ElideRight)
         self.setItemDelegate(VideoDelegate(self))
-        self.setAcceptDrops(False)
+        self.setAcceptDrops(True)
+        self.viewport().setAcceptDrops(True)
         self.set_size(160)
 
     def tile_size(self):
@@ -386,6 +389,8 @@ class FolderTree(QTreeWidget):
         super().__init__()
         self.setHeaderHidden(True)
         self.setColumnCount(1)
+        self.setAcceptDrops(True)
+        self.viewport().setAcceptDrops(True)
         self.itemExpanded.connect(lambda node: self.expand_requested.emit(node))
         self.itemClicked.connect(self.clicked_folder)
         self.setContextMenuPolicy(Qt.CustomContextMenu)
