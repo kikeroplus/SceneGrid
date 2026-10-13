@@ -1,4 +1,5 @@
 import os
+import struct
 import tempfile
 import threading
 import time
@@ -10,7 +11,7 @@ import cv2
 import numpy as np
 import win32api
 from PySide6.QtCore import QMimeData, QPoint, QPointF, Qt, QTimer, QUrl
-from PySide6.QtGui import QDragEnterEvent, QDragMoveEvent, QDropEvent, QImage, QWheelEvent
+from PySide6.QtGui import QDragEnterEvent, QDragMoveEvent, QDropEvent, QIcon, QImage, QWheelEvent
 from PySide6.QtMultimedia import QMediaPlayer
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QDialog, QMenu, QMessageBox
@@ -78,6 +79,29 @@ class SceneGridStandardTest(unittest.TestCase):
         self.window.set_rating(value)
         self.wait(lambda: not self.window.busy)
         QTest.qWait(150)
+
+    def test_application_icon_sizes_and_transparency(self):
+        path = Path(__file__).parent / "assets" / "scenegrid.ico"
+        icon = QIcon(str(path))
+        self.assertFalse(icon.isNull())
+        data = path.read_bytes()
+        reserved, kind, count = struct.unpack_from("<HHH", data)
+        self.assertEqual((reserved, kind, count), (0, 1, 9))
+        sizes = []
+        for index in range(count):
+            width, height, colors, reserved, planes, bits, length, offset = struct.unpack_from("<BBBBHHII", data, 6 + 16 * index)
+            size = width or 256
+            self.assertEqual(height or 256, size)
+            self.assertEqual((planes, bits), (1, 32))
+            frame = QImage.fromData(data[offset:offset + length], "PNG")
+            self.assertFalse(frame.isNull())
+            self.assertEqual((frame.width(), frame.height()), (size, size))
+            self.assertTrue(frame.hasAlphaChannel())
+            self.assertEqual(frame.pixelColor(0, 0).alpha(), 0)
+            self.assertGreater(frame.pixelColor(size // 2, size // 2).alpha(), 0)
+            self.assertFalse(icon.pixmap(size, size).isNull())
+            sizes.append(size)
+        self.assertEqual(sizes, [16, 20, 24, 32, 40, 48, 64, 128, 256])
 
     def test_contact_sheet_rating_and_playback_preservation(self):
         path = self.load()[0]

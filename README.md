@@ -52,6 +52,10 @@ Windows の評価を扱えない形式・書き込み権限のないファイル
 
 実装と標準の対応は `UI-COMPLIANCE.md` に記載しています。
 
+## アイコン
+
+16分割グリッドと評価の星を組み合わせたアイコンを、EXEと各ウィンドウに設定しています。透過PNGは `assets\scenegrid.png`、Windows用ICOは `assets\scenegrid.ico` です。生成プロンプトとICOの再生成手順は `assets\README.md` に記録しています。
+
 ## ビルド・検証
 
 ```powershell
